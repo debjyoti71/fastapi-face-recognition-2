@@ -1,0 +1,17 @@
+python -m venv venv       #to make a virtual environment
+
+venv\Scripts\activate     #to activate venv
+
+pip freeze > requirements.txt  #to save the packages and their versions in a file
+
+pip install -r requirements.txt  #to install the packages from the file
+
+uvicorn app.main:app --reload        #to run the app
+
+python -m uvicorn app.main:app --reload  #to run the app in venv
+
+python -m tests.test_training    #to run the tests
+
+ngrok http 8000 
+
+uvicorn app.main:app --host 0.0.0.0 --port 8000

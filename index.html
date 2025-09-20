@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Biometric Event Check‑In</title>
+  <style>
+    :root{
+      --bg:#0b1020;--panel:#111833;--muted:#92a0c0;--text:#e7ecff;--accent:#6aa6ff;--accent2:#5ce1a9;--danger:#ff6b6b;--warning:#f9c74f;
+      --border:#1a2446;--shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(180deg,#0b1020 0%, #0b1126 100%);color:var(--text);font:16px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    .app{display:grid;grid-template-columns:1fr 320px;gap:16px;padding:20px;max-width:1200px;margin:0 auto}
+    header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+    h1{font-size:22px;margin:0;letter-spacing:.4px}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow)}
+    .left{padding:18px}
+    .right{padding:0;overflow:hidden}
+
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    label{display:block;font-size:12px;color:var(--muted);margin:6px 0}
+    input{width:100%;background:#0d1329;border:1px solid var(--border);color:var(--text);padding:12px 14px;border-radius:12px;outline:none}
+    input:focus{border-color:var(--accent)}
+
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 16px;border-radius:12px;border:1px solid var(--border);background:#0d1329;color:var(--text);cursor:pointer;transition:.2s;user-select:none}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.25)}
+    .btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+    .btn.primary{background:linear-gradient(180deg,#2a5fff,#3d83ff);border:none}
+    .btn.warning{background:linear-gradient(180deg,#f9c74f,#ffb703);border:none;color:#1b1200}
+    .btn.danger{background:linear-gradient(180deg,#ff6b6b,#ff4d4d);border:none}
+
+    .controls{display:flex;align-items:center;gap:10px;margin-top:14px}
+
+    .status{margin-top:14px;padding:12px 14px;border-radius:12px;background:#0d1329;border:1px dashed var(--border);min-height:46px;display:flex;align-items:center;gap:10px}
+    .status.ok{border-color:#2bda9b;background:rgba(44,196,141,.12)}
+    .status.fail{border-color:#ff7676;background:rgba(255,118,118,.1)}
+
+    /* Right panel */
+    .right header{padding:14px 16px;border-bottom:1px solid var(--border)}
+    .right h2{font-size:16px;margin:0}
+    .list{max-height:calc(100% - 56px);overflow:auto;padding:8px}
+    .user{padding:10px 12px;border:1px solid var(--border);border-radius:12px;margin:8px;background:#0d1329}
+
+    /* Camera area */
+    .cam-wrap{margin-top:16px;display:grid;grid-template-columns: 1fr 200px;gap:12px}
+    .preview{position:relative;border:1px dashed var(--border);border-radius:14px;overflow:hidden;background:#0d1329;min-height:220px}
+    video,canvas{width:100%;height:100%;object-fit:cover;display:block}
+    .shot{border:1px solid var(--border);background:#0d1329;border-radius:14px;padding:8px;display:grid;place-items:center;font-size:12px;color:var(--muted)}
+    
+    /* Added styles for captured image display */
+    .captured-image{width:100%;height:100%;object-fit:cover;border-radius:8px}
+    .image-container{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+
+    /* Toasts */
+    .toast{position:fixed;right:18px;bottom:18px;background:#0d1329;border:1px solid var(--border);padding:12px 14px;border-radius:12px;box-shadow:var(--shadow);opacity:0;transform:translateY(8px);transition:.25s}
+    .toast.show{opacity:1;transform:none}
+
+    /* Success animation */
+    .success{
+      --size:56px; width:var(--size); height:var(--size); border-radius:50%;
+      background:conic-gradient(from 180deg at 50% 50%, #2bda9b, #6fffd1);
+      display:grid;place-items:center;box-shadow:0 0 0 6px rgba(43,218,155,.2);
+      animation:pulse 1.2s ease-out 1;
+    }
+    .success:after{content:"";display:block;width:22px;height:12px;border:4px solid #0b1020;border-top:0;border-right:0;transform:rotate(-45deg);margin-top:-2px}
+    @keyframes pulse{0%{transform:scale(.8)}70%{transform:scale(1.05)}100%{transform:scale(1)}}
+
+    /* Helper */
+    .muted{color:var(--muted)}
+    .hint{font-size:12px;color:var(--muted);margin-top:6px}
+    .pill{font-size:11px;padding:4px 8px;border-radius:999px;border:1px solid var(--border);background:#0d1329;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Biometric Event Check‑In</h1>
+      <div class="pill" id="secureHint">Camera requires HTTPS or localhost</div>
+    </header>
+
+    <!-- Left: form and camera -->
+    <section class="card left">
+      <div class="row">
+        <div>
+          <label for="eventName">Event Name</label>
+          <input id="eventName" placeholder="e.g. TechFest2025" autocomplete="off" />
+          <div class="hint">Changes here refresh the right‑side user list via <code>/api/all_user</code>.</div>
+        </div>
+        <div>
+          <label for="userName">User Name</label>
+          <input id="userName" placeholder="e.g. alice_roy" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" id="startBtn" aria-label="Start biometric capture and verification">▶ Start Biometric</button>
+        <button class="btn warning" id="setEventBtn" aria-label="Set current event and load users">📅 Set as Event</button>
+        <button class="btn" id="addUserBtn" style="display:none" aria-label="Add user to current event">＋ Add User</button>
+        <button class="btn warning" id="retryBtn" style="display:none" aria-label="Retry biometric capture">↺ Retry</button>
+      </div>
+
+      <div class="status" id="statusBox"><span class="muted">Status messages will appear here…</span></div>
+
+      <div class="cam-wrap">
+        <div class="preview">
+          <video id="video" autoplay playsinline muted></video>
+          <canvas id="canvas" style="display:none"></canvas>
+        </div>
+        <div class="shot" id="shotInfo">No snapshot yet</div>
+      </div>
+
+      <div class="hint">On clicking <b>Start Biometric</b>, the app opens the camera, auto‑captures a frame, calls <code>/verify/</code> with <i>event_name</i> + <i>photo</i>, and drives the flow based on the response.</div>
+    </section>
+
+    <!-- Right: event users list -->
+    <aside class="card right" id="rightPanel">
+      <header>
+        <h2>Users in Event</h2>
+      </header>
+      <div class="list" id="userList"></div>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ===== Configuration =====
+    const API_BASE = 'https://6a0a350bd2a6.ngrok-free.app';
+    const API = {
+      EVENT_USERS: API_BASE + '/api/all_user',     // GET ?event_name=...
+      VERIFY: API_BASE + '/verify/',              // POST formData: event_name, file
+      ADD_USER: API_BASE + '/addUser/',           // POST formData: event_name, username, file
+      EVENTS: API_BASE + '/api/events'            // GET all events
+    };
+
+    const USE_MOCK = false;
+
+    // ===== Elements =====
+    const eventNameEl = document.getElementById('eventName');
+    const userNameEl = document.getElementById('userName');
+    const startBtn = document.getElementById('startBtn');
+    const setEventBtn = document.getElementById('setEventBtn');
+    const addUserBtn = document.getElementById('addUserBtn');
+    const retryBtn = document.getElementById('retryBtn');
+    const statusBox = document.getElementById('statusBox');
+    const userListEl = document.getElementById('userList');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const shotInfo = document.getElementById('shotInfo');
+    const toastEl = document.getElementById('toast');
+
+    let mediaStream = null;
+    let lastPhotoBlob = null;
+    let capturedImageUrl = null;
+
+    (function(){
+      const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
+      if(isSecure){ document.getElementById('secureHint').style.display='none'; }
+    })();
+
+    function setStatus(type, msg){
+      statusBox.className = 'status ' + (type||'');
+      statusBox.innerHTML = msg;
+    }
+
+    function showToast(msg){
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      setTimeout(()=>toastEl.classList.remove('show'), 2200);
+    }
+
+    function debounce(fn, delay){
+      let t; return (...args)=>{clearTimeout(t); t=setTimeout(()=>fn(...args), delay)}
+    }
+
+    async function stopCamera(){
+      if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream = null; }
+      video.srcObject = null;
+    }
+
+    async function startCamera(){
+      await stopCamera();
+      try{
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'user' } });
+        video.srcObject = mediaStream;
+        await new Promise(res=> video.onloadedmetadata = res);
+      }catch(err){
+        console.error(err);
+        setStatus('fail', `<b>Camera error:</b> ${err.message}`);
+        showToast('Camera access failed');
+        throw err;
+      }
+    }
+
+    function captureFrame(){
+      const w = video.videoWidth || 640; const h = video.videoHeight || 480;
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, w, h);
+      return new Promise(res=> canvas.toBlob(b=> res(b), 'image/jpeg', 0.9));
+    }
+
+    function displayCapturedImage(blob) {
+      if (capturedImageUrl) {
+        URL.revokeObjectURL(capturedImageUrl);
+      }
+      capturedImageUrl = URL.createObjectURL(blob);
+      shotInfo.innerHTML = `
+        <div class="image-container">
+          <img src="${capturedImageUrl}" alt="Captured photo" class="captured-image" />
+        </div>
+      `;
+    }
+
+    async function fetchJSON(url, opts){
+      const r = await fetch(url, opts);
+      const ct = r.headers.get('content-type') || '';
+      let body = null;
+      try{ body = ct.includes('application/json') ? await r.json() : await r.text(); }catch(e){ body = null; }
+      return { ok:r.ok, status:r.status, body };
+    }
+
+    function renderUsers(list){
+      userListEl.innerHTML = '';
+      if(!list || !list.length){
+        userListEl.innerHTML = `<div class="user muted">No users found for this event.</div>`;
+        return;
+      }
+      list.forEach(u=>{
+        const div = document.createElement('div');
+        div.className = 'user';
+        div.textContent = u;
+        userListEl.appendChild(div);
+      });
+    }
+
+    async function getEventUsers(eventName){
+        if(!eventName) { renderUsers([]); return; }
+        if(USE_MOCK){
+            await new Promise(r=>setTimeout(r,300));
+            renderUsers(['alice','bob']);
+            return;
+        }
+        const url = `${API.EVENT_USERS}?event_name=${encodeURIComponent(eventName)}`;
+        const {ok, body} = await fetchJSON(url, { 
+          method:'GET',
+          headers: { "ngrok-skip-browser-warning": "true" }
+         });
+
+        if(ok && body){
+            // handle response whether it's {users:[...]} or just an array
+            if(Array.isArray(body)) {
+            renderUsers(body);
+            } else if(Array.isArray(body.users)) {
+            renderUsers(body.users);
+            } else {
+            renderUsers([]);
+            }
+        } else {
+            renderUsers([]);
+        }
+    }
+
+
+    async function callVerify(eventName, photoBlob){
+      if(USE_MOCK){
+        await new Promise(r=>setTimeout(r,600));
+        return { ok:true, body:{ verified: Math.random() > 0.5, username:'mockuser', confidence:87.5 } };
+      }
+      const fd = new FormData();
+      fd.append('event_name', eventName);
+      fd.append('file', photoBlob, 'snapshot.jpg');
+      return await fetchJSON(API.VERIFY, { method:'POST', body: fd });
+    }
+
+    async function callAddUser(eventName, userName, photoBlob){
+      if(USE_MOCK){
+        await new Promise(r=>setTimeout(r,600));
+        return { ok:true, status:200, body:{ status:'success', message:'User added', embedding_count:1 } };
+      }
+      const fd = new FormData();
+      fd.append('event_name', eventName);
+      fd.append('username', userName);
+      fd.append('file', photoBlob, 'snapshot.jpg');
+      return await fetchJSON(API.ADD_USER, { method:'POST', body: fd });
+    }
+
+    const debouncedUsers = debounce(()=> getEventUsers(eventNameEl.value.trim()), 400);
+    eventNameEl.addEventListener('input', debouncedUsers);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const persisted = localStorage.getItem('eventName');
+      if (persisted) {
+        eventNameEl.value = persisted;
+        getEventUsers(persisted);
+        setStatus('', `Loaded saved event <b>${persisted}</b>.`);
+      }
+    });
+
+    setEventBtn.addEventListener('click', async () => {
+      const eventName = eventNameEl.value.trim();
+      if(!eventName){ 
+        setStatus('fail', 'Please enter an <b>Event Name</b> first.'); 
+        showToast('Event name required'); 
+        return; 
+      }
+      
+      setStatus('', 'Fetching users for event...');
+      setEventBtn.disabled = true;
+      
+      try {
+        await getEventUsers(eventName);
+        localStorage.setItem('eventName', eventName);
+        setStatus('ok', `✅ Event set to <b>${eventName}</b>. Users loaded successfully.`);
+        showToast(`Event set: ${eventName}`);
+      } catch (err) {
+        console.error(err);
+        setStatus('fail', `Error setting event: ${err.message}`);
+        showToast('Failed to set event');
+      } finally {
+        setEventBtn.disabled = false;
+      }
+    });
+
+    retryBtn.addEventListener('click', async ()=>{
+      setStatus('', '<span class="muted">Retrying…</span>');
+      addUserBtn.style.display = 'none';
+      await handleBiometric();
+    });
+
+    startBtn.addEventListener('click', handleBiometric);
+
+    async function handleBiometric(){
+      const eventName = eventNameEl.value.trim();
+      if(!eventName){ setStatus('fail', 'Please enter an <b>Event Name</b> first.'); showToast('Event name required'); return; }
+
+      setStatus('', 'Starting camera…');
+      startBtn.disabled = true; addUserBtn.style.display='none'; retryBtn.style.display='none';
+      try{
+        await startCamera();
+        setStatus('', 'Capturing photo…');
+        await new Promise(r=>setTimeout(r, 450));
+        lastPhotoBlob = await captureFrame();
+        await stopCamera();
+
+        displayCapturedImage(lastPhotoBlob);
+
+        setStatus('', 'Verifying…');
+        const { ok, body } = await callVerify(eventName, lastPhotoBlob);
+        if(!ok){ throw new Error('Verify request failed'); }
+
+        const verified = body && body.verified;
+        if(verified){
+          setStatus('ok', `✅ Verified as <b>${body.username}</b> (Confidence: ${body.confidence?.toFixed(1)}%)`);
+          showToast('User verified');
+          addUserBtn.style.display = 'none';
+        } else {
+          setStatus('fail', '❌ Not verified. You can add this user.');
+          addUserBtn.style.display = 'inline-flex';
+          retryBtn.style.display = 'inline-flex';
+        }
+      }catch(err){
+        console.error(err);
+        setStatus('fail', `Error: ${err.message}`);
+        retryBtn.style.display = 'inline-flex';
+      } finally {
+        startBtn.disabled = false;
+      }
+    }
+
+    addUserBtn.addEventListener('click', async ()=>{
+      const eventName = eventNameEl.value.trim();
+      const userName = userNameEl.value.trim();
+      if(!eventName || !userName){ setStatus('fail', 'Enter <b>Event Name</b> and <b>User Name</b> to add user.'); showToast('Missing details'); return; }
+      if(!lastPhotoBlob){ setStatus('fail', 'No snapshot available. Click <b>Start Biometric</b> first.'); return; }
+
+      setStatus('', 'Adding user…');
+      addUserBtn.disabled = true;
+      try{
+        const res = await callAddUser(eventName, userName, lastPhotoBlob);
+        if(res.ok && res.status === 200){
+          setStatus('ok', `<div style="display:flex;align-items:center;gap:10px"><div class="success"></div><div><b>User Added</b><div class="muted">${userName} added to ${eventName}</div></div></div>`);
+          showToast('User added successfully');
+          // refresh right list
+          getEventUsers(eventName);
+          addUserBtn.style.display='none';
+        } else {
+          throw new Error('Add user failed');
+        }
+      }catch(err){
+        console.error(err);
+        setStatus('fail', `Add user error: ${err.message}`);
+        showToast('Add user error');
+      } finally {
+        addUserBtn.disabled = false;
+      }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      if (capturedImageUrl) {
+        try { URL.revokeObjectURL(capturedImageUrl); } catch {}
+        capturedImageUrl = null;
+      }
+      stopCamera();
+    });
+
+    // Initial state
+    setStatus('', '<span class="muted">Fill details and start biometric</span>');
+  </script>
+</body>
+</html>

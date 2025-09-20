@@ -1,0 +1,32 @@
+fastapi-face-recognition/
+├─] .env (ignored)
+├── .gitignore
+├── app/
+│   ├── api/
+│   │   ├── events.py
+│   │   ├── get_transaction_details.py
+│   │   ├── routes_add.py
+│   │   ├── routes_verify.py
+│   │   └── __init__.py
+│   │ 
+│   ├── core/
+│   │   ├── config.py
+│   │   ├── logging_config.py
+│   │   └── utils.py
+│   │   
+│   ├── main.py
+│   ├── models/
+│   └── services/
+│       ├── cloud_storage.py
+│       ├── event_service.py
+│       ├── face_service.py
+│       └── storage.py
+│ 
+├── command.txt
+├─] data/ (ignored)
+├── index.html
+├─] logs/ (ignored)
+├── README.md
+├── requirements.txt
+├─] tests/ (ignored)
+└─] venv/ (ignored)
