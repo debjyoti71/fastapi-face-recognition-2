@@ -45,9 +45,9 @@ tests/
 # OS
 .DS_Store
 Thumbs.db
-services/models
+app/services/models
 frontend
-models
+
 
 310venv
 
