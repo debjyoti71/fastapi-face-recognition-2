@@ -13,6 +13,7 @@ from app.core import config
 # Check if using Cloudinary or local storage
 USE_CLOUDINARY = os.getenv("USE_CLOUDINARY", "true").lower() == "true"
 LOCAL_EMBEDDINGS_PATH = "data/embeddings.json"
+MODEL_ROOT = os.path.join(os.path.dirname(__file__), "models")  # e.g., ./models/buffalo_l
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +24,20 @@ THRESHOLD = 0.4
 _face_app = None
 
 def get_face_app():
-    """Get or initialize InsightFace app"""
+    """Get or initialize InsightFace app with persistent local models."""
     global _face_app
     if _face_app is None:
-        _face_app = insightface.app.FaceAnalysis(providers=['CPUExecutionProvider'])
+        logger.info(f"Loading InsightFace model from local folder: {MODEL_ROOT}")
+        os.makedirs(MODEL_ROOT, exist_ok=True)
+
+        # Specify the model name you want (buffalo_l, for example)
+        _face_app = insightface.app.FaceAnalysis(
+            name="buffalo_l",
+            root=MODEL_ROOT,
+            providers=["CPUExecutionProvider"]
+        )
         _face_app.prepare(ctx_id=0, det_size=(640, 640))
+        logger.info("InsightFace model ready")
     return _face_app
 
 def _load_embeddings_from_cloudinary(retry_count=3):
@@ -106,31 +116,27 @@ def _save_embeddings_to_cloudinary(data):
         if 'temp_path' in locals() and os.path.exists(temp_path):
             os.unlink(temp_path)
 
-def extract_face_embedding(image_array):
-    """Extract face embedding using InsightFace"""
+def extract_face_embedding(image_array: np.ndarray):
+    """Extract face embedding from an image array."""
     try:
-        # Convert RGB to BGR for OpenCV
+        # Convert RGB -> BGR if needed
         if len(image_array.shape) == 3 and image_array.shape[2] == 3:
             image_bgr = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
         else:
             image_bgr = image_array
-            
-        # Get face analysis app
+
         app = get_face_app()
-        
-        # Detect faces and get embeddings
         faces = app.get(image_bgr)
-        
+
         if len(faces) == 0:
+            logger.warning("No face detected")
             return None
         elif len(faces) > 1:
-            logger.warning(f"Multiple faces detected ({len(faces)}), using the first one")
-            
-        # Return the embedding of the first face
+            logger.warning(f"Multiple faces detected ({len(faces)}), using first one")
+
         return faces[0].embedding.tolist()
-            
     except Exception as e:
-        logger.error(f"Error extracting face embedding: {e}")
+        logger.error(f"Error extracting embedding: {e}")
         return None
 
 def add_user_face(event_name: str, username: str, embedding: list):

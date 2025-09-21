@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/")
-async def verify_user(event_name: str = Form(...), file: UploadFile = File(...)):
+async def verify_user(event_name: str = Form("B"), file: UploadFile = File(...)):
     """
     Verify if a given face image belongs to a registered user in the event.
     """

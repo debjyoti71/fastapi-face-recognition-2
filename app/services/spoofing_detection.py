@@ -6,7 +6,7 @@ import cv2
 logger = logging.getLogger(__name__)
 
 # Load YOLO model once at module level
-model = YOLO('models/yolov8n.pt')
+model = YOLO('app/models/yolov8n.pt')
 
 def detect_spoofing(image: np.ndarray) -> bool:
     """

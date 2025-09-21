@@ -40,14 +40,14 @@ logs/
 
 # Temporary files
 temp_audio/
-models/
-data/
+# data/
 tests/
 # OS
 .DS_Store
 Thumbs.db
-
+services/models
 frontend
+models
 
 310venv
 
