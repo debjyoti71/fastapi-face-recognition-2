@@ -1,6 +1,7 @@
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse
 from app.services import face_service_insightface as face_service
+from app.services.phone_detection import detect_phone
 import numpy as np
 from PIL import Image
 import io
@@ -26,6 +27,10 @@ async def verify_user(event_name: str = Form(...), file: UploadFile = File(...))
         image = np.array(Image.open(io.BytesIO(file.file.read())))
         logger.info(f"Verification image loaded successfully, shape: {image.shape}")
 
+        # Detect phone in image
+        logger.info(f"Phone detecting")
+        phone_detected = detect_phone(image)
+        
         # Extract face embedding using DeepFace
         embedding = face_service.extract_face_embedding(image)
         if embedding is None:
@@ -39,13 +44,16 @@ async def verify_user(event_name: str = Form(...), file: UploadFile = File(...))
         
         # Convert result format for compatibility
         response = {
-            "verified": result.get('flag', False),
+            "flag": result.get('flag', False),
             "username": result.get('username'),
             "message": result.get('message', ''),
-            "confidence": result.get('confidence', 0)
+            "user_in_system": result.get('user_in_system', False),
+            "confidence": float(result.get('confidence', 0)),
+            "face_detected": result.get('face_detected', False),
+            "phone_detected": phone_detected
         }
         
-        logger.info(f"Verification result: {response.get('verified')} for event: {event_name}")
+        logger.info(f"Verification result: {response} \n for event: {event_name}")
         return JSONResponse(response)
 
     except Exception as e:

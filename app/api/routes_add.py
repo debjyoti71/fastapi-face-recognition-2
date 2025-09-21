@@ -1,6 +1,7 @@
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse
 from app.services import face_service_insightface as face_service
+from app.services.phone_detection import detect_phone
 import numpy as np
 from PIL import Image
 import io
@@ -26,6 +27,9 @@ async def add_user(event_name: str = Form(...), username: str = Form(...), file:
         image = np.array(Image.open(io.BytesIO(file.file.read())))
         logger.info(f"Image loaded successfully, shape: {image.shape}")
 
+        # Detect phone in image
+        phone_detected = detect_phone(image)
+        
         # Extract face embedding using DeepFace
         embedding = face_service.extract_face_embedding(image)
         if embedding is None:
@@ -36,7 +40,8 @@ async def add_user(event_name: str = Form(...), username: str = Form(...), file:
 
         # Add user
         result = face_service.add_user_face(event_name, username, embedding)
-        logger.info(f"Add user result: {result.get('status')} for {username}")
+        result["phone_detected"] = phone_detected
+        logger.info(f"Add user result: {result} \n for {username}")
         return JSONResponse(result)
 
     except Exception as e:
