@@ -34,7 +34,6 @@ def detect_spoofing(image: np.ndarray) -> bool:
         
         # Convert to grayscale for analysis
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        h, w = image.shape[:2]
         
         for x1, y1, x2, y2, conf in persons:
             # Person area analysis
@@ -50,20 +49,20 @@ def detect_spoofing(image: np.ndarray) -> bool:
             avg_brightness = np.mean(person_roi)
             
             # Spoofing detection thresholds
-            too_uniform = brightness_std < 65  # Phone screens have uniform lighting           #normal 72.3
-            moderate_brightness = 80 < avg_brightness > 140  # Typical phone screen brightness #normal 133.2
-            small_size = person_area > 230000  # Small detection indicates distant phone screen   #normal 221428
-            
+            too_uniform = brightness_std < 60          # phone screens more uniform
+            too_bright = avg_brightness > 160         # phone screen brightness
+            too_small = person_area < 180000          # small area indicates phone
+
             logger.info(f"Person area: {person_area:.0f}, Brightness std: {brightness_std:.1f}, Avg brightness: {avg_brightness:.1f}")
             
             # Spoofing conditions
-            if (too_uniform or moderate_brightness or small_size):
+            # if too_uniform or too_bright or too_small:
+            if too_uniform or too_bright:
                 logger.warning("SPOOFING DETECTED - Phone screen characteristics!")
                 return True
         
         return False
-        
     except Exception as e:
-        logger.error(f"Error in spoofing detection: {e}")
+        logger.error(f"Spoofing detection error: {e}")
         return False
 
