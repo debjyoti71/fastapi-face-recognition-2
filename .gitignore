@@ -55,3 +55,4 @@ test_api.py
 test_deepface.py
 test_phone_detection.py
 phone_detect.py
+dependencies

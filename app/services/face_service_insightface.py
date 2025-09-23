@@ -13,18 +13,32 @@ from app.core import config
 # Check if using Cloudinary or local storage
 USE_CLOUDINARY = os.getenv("USE_CLOUDINARY", "true").lower() == "true"
 LOCAL_EMBEDDINGS_PATH = "data/embeddings.json"
-
-# Load Haar cascades for face detection
-FACE_CASCADE_PATH = "app/models/haarcascade_frontalface_default.xml"
-face_cascade = cv2.CascadeClassifier(FACE_CASCADE_PATH)
-
-if face_cascade.empty():
-    raise ValueError(f"Failed to load Haar cascade from {FACE_CASCADE_PATH}")
+MODEL_ROOT = os.path.join(os.path.dirname(__file__), "models")  # e.g., ./models/buffalo_l
 
 logger = logging.getLogger(__name__)
 
-# Threshold for face verification similarity (90% confidence)
-THRESHOLD = 0.1
+# Threshold for face verification similarity (60% confidence)
+THRESHOLD = 0.4
+
+# Initialize InsightFace model (lazy loading)
+_face_app = None
+
+def get_face_app():
+    """Get or initialize InsightFace app with persistent local models."""
+    global _face_app
+    if _face_app is None:
+        logger.info(f"Loading InsightFace model from local folder: {MODEL_ROOT}")
+        os.makedirs(MODEL_ROOT, exist_ok=True)
+
+        # Specify the model name you want (buffalo_l, for example)
+        _face_app = insightface.app.FaceAnalysis(
+            name="buffalo_l",
+            root=MODEL_ROOT,
+            providers=["CPUExecutionProvider"]
+        )
+        _face_app.prepare(ctx_id=0, det_size=(640, 640))
+        logger.info("InsightFace model ready")
+    return _face_app
 
 def _load_embeddings_from_cloudinary(retry_count=3):
     """Load embeddings from Cloudinary or local file based on USE_CLOUDINARY flag"""
@@ -102,28 +116,28 @@ def _save_embeddings_to_cloudinary(data):
         if 'temp_path' in locals() and os.path.exists(temp_path):
             os.unlink(temp_path)
 
-def extract_face_embedding(image_array: np.ndarray, size=(100, 100)):
-    """
-    Detect the largest face in the image, crop it, resize,
-    and return as a flattened vector (embedding).
-    """
-    gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+def extract_face_embedding(image_array: np.ndarray):
+    """Extract face embedding from an image array."""
+    try:
+        # Convert RGB -> BGR if needed
+        if len(image_array.shape) == 3 and image_array.shape[2] == 3:
+            image_bgr = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
+        else:
+            image_bgr = image_array
 
-    if len(faces) == 0:
-        logger.warning("No face detected")
+        app = get_face_app()
+        faces = app.get(image_bgr)
+
+        if len(faces) == 0:
+            logger.warning("No face detected")
+            return None
+        elif len(faces) > 1:
+            logger.warning(f"Multiple faces detected ({len(faces)}), using first one")
+
+        return faces[0].embedding.tolist()
+    except Exception as e:
+        logger.error(f"Error extracting embedding: {e}")
         return None
-
-    # Pick largest face
-    x, y, w, h = max(faces, key=lambda rect: rect[2]*rect[3])
-    face_crop = gray[y:y+h, x:x+w]
-    face_resized = cv2.resize(face_crop, size)
-
-    # Normalize pixel values
-    face_vector = face_resized.flatten().astype(np.float32) / 255.0
-    logger.info(f"Successfully extracted face embedding (sample): {face_vector[:10]}")
-    return face_vector.tolist()
-
 
 def add_user_face(event_name: str, username: str, embedding: list):
     """Add a new user embedding to the specified event."""
